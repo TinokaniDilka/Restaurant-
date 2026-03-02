@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout"
+      layout:decorate="~{fragments/layout}">
+<head th:fragment="head_config(pageTitle)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${pageTitle}">Gustea's Online Restaurant</title>
+
+    <!-- Use Thymeleaf-safe absolute path for static resources -->
+    <link rel="stylesheet" th:href="@{/css/style.css}" href="/css/style.css">
+    <title>Gustea's Online Restaurant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gold: '#ffdb1a',
+                    }
+                }
+            }
+        }
+    </script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db, auth, userId = 'loading';
+
+        window.onload = async () => {
+            if (Object.keys(firebaseConfig).length === 0) return;
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
+                else await signInAnonymously(auth);
+
+                userId = auth.currentUser?.uid || crypto.randomUUID();
+                document.getElementById('user-id-display')?.innerText = `User: ${userId.substring(0, 8)}...`;
+                setupReservationListener(db, userId, appId);
+            } catch (e) { console.error(e); }
+        };
+
+        function getPublicCollectionRef(db, name) {
+            return collection(db, `artifacts/${appId}/public/data/${name}`);
+        }
+
+        window.submitReservation = async function(e) {
+            e.preventDefault();
+            const name = document.getElementById('res-name').value.trim();
+            const date = document.getElementById('res-date').value;
+            const time = document.getElementById('res-time').value;
+            const guests = parseInt(document.getElementById('res-guests').value);
+
+            if (!name || !date || !time || !guests) {
+                showModal('Please fill all fields', false);
+                return;
+            }
+
+            const data = {
+                userId, name, datetime: new Date(`${date}T${time}`),
+                guests, status: 'Pending', createdAt: serverTimestamp()
+            };
+
+            try {
+                await addDoc(getPublicCollectionRef(db, 'reservations'), data);
+                showModal('Reservation submitted!', true);
+                e.target.reset();
+            } catch (err) {
+                showModal('Error: ' + err.message, false);
+            }
+        };
+
+        function setupReservationListener(db, uid, appId) {
+            const q = query(getPublicCollectionRef(db, 'reservations'), orderBy('datetime', 'desc'));
+            onSnapshot(q, snap => {
+                const list = document.getElementById('reservations-list');
+                if (!list) return;
+                list.innerHTML = '';
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    const li = document.createElement('li');
+                    li.className = `p-4 border-b border-gray-700 flex justify-between ${d.userId === uid ? 'bg-zinc-800' : 'bg-zinc-900'}`;
+                    const dateStr = d.datetime ? new Date(d.datetime.seconds * 1000).toLocaleString('en-GB', {dateStyle:'short', timeStyle:'short'}) : 'N/A';
+                    li.innerHTML = `<div><p class="text-white font-medium">${d.name} - ${d.guests} Guests</p><p class="text-sm text-gray-400">${dateStr}</p></div>
+                                    <span class="${d.status==='Confirmed'?'text-green-500':'text-yellow-500'} font-bold text-sm">${d.status}</span>`;
+                    list.appendChild(li);
+                });
+            });
+        }
+
+        function showModal(msg, success) {
+            const modal = document.getElementById('app-modal');
+            document.getElementById('modal-message').textContent = msg;
+            document.getElementById('modal-icon').innerHTML = success ?
+                `<svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>` :
+                `<svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+            modal.classList.remove('hidden');
+            setTimeout(() => modal.classList.add('hidden'), 3000);
+        }
+    </script>
+
+    <style>
+        :root { --color-bg: #000000; --color-gold: #ffdb1a; --color-dark: #1a1a1a; }
+        html, body { font-family: 'Segoe UI', system-ui, sans-serif; background-color: #000000 !important; color: #e5e5e5; min-height: 100vh; }
+        .gold, .text-gold { color: #ffdb1a !important; }
+        .bg-gold { background: #ffdb1a !important; color: #000000 !important; }
+        .font-heading { font-family: Georgia, 'Times New Roman', serif; }
+    </style>
+</head>
+<body class="antialiased bg-black">
+
+<!-- Notification Modal -->
+<div id="app-modal" class="hidden fixed inset-0 z-50 flex items-start justify-center pt-20">
+    <div class="bg-zinc-800 p-4 rounded-lg shadow-2xl flex items-center space-x-3 max-w-sm border border-gold">
+        <span id="modal-icon"></span>
+        <p id="modal-message" class="text-sm font-medium text-white"></p>
+    </div>
+</div>
+
+<!-- Header -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-black border-b border-gray-800 shadow-lg">
+    <div class="max-w-7xl mx-auto flex justify-between items-center px-6 py-4">
+        <!-- Left nav items -->
+        <nav class="navbar-left">
+            <ul class="flex space-x-8">
+                <li><a href="/index" class="text-sm uppercase tracking-wider" style="color: #ffdb1a;">Home</a></li>
+                <li><a href="#menu" class="hover:text-gold transition" style="color: #ffdb1a;">Menu</a></li>
+            </ul>
+        </nav>
+
+        <!-- Centered logo -->
+        <h1 class="text-5xl md:text-6xl logo mb-3" style="color: #ffdb1a;">Gustea's</h1>
+
+        <!-- Right nav items -->
+        <nav class="navbar-right">
+            <ul class="flex space-x-8">
+                <li><a href="/reservation" class="text-sm uppercase tracking-wider" style="color: #ffdb1a;">Reservations</a></li>
+                <li class="relative">
+                    <a href="/cart" class="hover:text-gold transition" style="color: #ffdb1a;">Cart</a>
+                    <span id="cart-badge" class="absolute -top-3 -right-6 bg-red-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold opacity-0 transition">
+                        0
+                    </span>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    <hr style="border-color: #fffdfd;">
+</header>
+
+<main>
+    <!-- Hero Section - Three Images Horizontally -->
+    <section class="hero py-10 md:py-15">
+        <div class="max-w-7xl mx-auto px-6">
+
+            <!-- Title above the images (optional but looks elegant) -->
+            <div class="text-center mb-12">
+                <br>
+                <br>
+                <br>
+                <br>
+                <h1 class="text-xl md:text-2xl lg:text-2xl font-heading text-gold font-bold" style="color: #ffdb1a">
+                    Welcome to Gustea's
+                </h1>
+            </div>
+
+            <!-- Three images side by side -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
+
+                <!-- Image 1 -->
+                <div class="group relative overflow-hidden rounded-2xl shadow-2xl border border-gold/20">
+                    <img
+                            src="https://thumbs.dreamstime.com/b/chocolate-moose-dessert-14227296.jpg"
+                            alt="Luxury dining atmosphere"
+                            class="w-full h-[420px] md:h-[520px] lg:h-[580px] object-cover transition-transform duration-700 group-hover:scale-110"
+                    >
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-60 group-hover:opacity-40 transition-opacity"></div>
+                    <div class="absolute bottom-8 left-8 right-8 text-white">
+                        <h3 class="text-2xl md:text-3xl font-heading text-gold">Elegant Ambiance</h3>
+                        <p class="text-gray-200 mt-2 text-sm md:text-base">Sophisticated and warm</p>
+                    </div>
+                </div>
+
+                <!-- Image 2 -->
+                <div class="group relative overflow-hidden rounded-2xl shadow-2xl border border-gold/20">
+                    <img
+                            src="https://citynomads.com/wp-content/uploads/2023/03/Elfuego-Texture-of-Mushroom.jpg"
+                            alt="Gourmet food presentation"
+                            class="w-full h-[420px] md:h-[520px] lg:h-[580px] object-cover transition-transform duration-700 group-hover:scale-110"
+                    >
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-60 group-hover:opacity-40 transition-opacity"></div>
+                    <div class="absolute bottom-8 left-8 right-8 text-white">
+                        <h3 class="text-2xl md:text-3xl font-heading text-gold">Art on Plate</h3>
+                        <p class="text-gray-200 mt-2 text-sm md:text-base">Every dish a masterpiece</p>
+                    </div>
+                </div>
+
+                <!-- Image 3 -->
+                <div class="group relative overflow-hidden rounded-2xl shadow-2xl border border-gold/20">
+                    <img
+                            src="https://fitfoodiefinds.com/wp-content/uploads/2021/02/avocado-smoothie-7-1365x2048.jpg"
+                            alt="Fine dining experience"
+                            class="w-full h-[420px] md:h-[520px] lg:h-[580px] object-cover transition-transform duration-700 group-hover:scale-110"
+                    >
+                    <div class="absolute inset-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent opacity-60 group-hover:opacity-40 transition-opacity"></div>
+                    <div class="absolute bottom-8 left-8 right-8 text-white">
+                        <h3 class="text-2xl md:text-3xl font-heading text-gold">Unforgettable Moments</h3>
+                        <p class="text-gray-200 mt-2 text-sm md:text-base">Created for you</p>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- MENU -->
+    <section id="menu" class="max-w-7xl mx-auto py-20 px-6">
+        <h2 class="text-5xl text-center font-heading text-gold mb-16" style="color: #ffdb1a">The Signature Menu</h2>
+
+        <h3 class="text-4xl font-heading text-gold mb-8 border-b border-gold/50 pb-2" style="color: #ffdb1a">Appetizers</h3>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-12 " style="color: #ffdb1a">
+
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://www.inspiredtaste.net/wp-content/uploads/2018/08/Pan-Seared-Scallops-Recipe-1200.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Seared Scallops</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Deliciously golden scallops with a soft, buttery center.</p>
+                <p class="text-lg font-bold text-gold price">Rs.1100</p>
+                <div class="stars text-gold text-2xl mb-4"> ★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://theatlantic.com.au/wp-content/uploads/2023/08/NewMenu_TheAtlantic_August2023_Low_008.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Oysters Mignonette</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Briny oysters with crisp mignonette sauce.</p>
+                <p class="text-lg font-bold text-gold price">Rs.2250</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+
+
+            <div class="menu-item  p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://bigoven-res.cloudinary.com/image/upload/v1673561304/spinach-dip-77b5d7.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Artichoke Dip</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Creamy spinach and artichoke served with grilled bread.</p>
+                <p class="text-lg font-bold text-gold price">Rs.1200</p>
+                <div class="flex text-gold text-xl mb-4">★★★☆☆</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://elianarecipes.com/wp-content/uploads/2024/08/Lasagna-Soup-Recipe-1.png" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Lasagna-Soup</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Lasagna reimagined as a creamy, cozy soup.</p>
+                <p class="text-lg font-bold text-gold price">Rs.850</p>
+                <div class="flex text-gold text-xl mb-4">★★★★☆</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://i.pinimg.com/originals/78/8d/03/788d035d282fc95ac4ee918952d6d8fa.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Ratatouille</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Artfully layered seasonal vegetables, gently roasted and infused with fragrant Provençal herbs.</p>
+                <p class="text-lg font-bold text-gold price">Rs.1550</p>
+                <div class="flex text-gold text-xl mb-4">★★★★☆</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://natashaskitchen.com/wp-content/uploads/2019/11/Classic-Quiche-Lorraine-Recipe-Beautiful-flaky-pastry-crust-is-paired-with-a-delicious-savory-egg-custard.-Perfect-for-breakfast-or-brunch.-1-4.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Quiche lorraine</h3>
+                <p class="text-gray-400 text-sm italic mb-4">A savory French tart with a buttery crust, filled with creamy eggs, cheese, and smoky bacon.</p>
+                <p class="text-lg font-bold text-gold price">Rs.800</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+        </div>
+
+
+
+        <h3 class="text-4xl font-heading text-gold mb-8 mt-16 border-b border-gold/50 pb-2" style="color: #ffdb1a">Main Courses</h3>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-12" style="color: #ffdb1a">
+
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://perfectlyprovence.co/wp-content/uploads/2017/02/duck-confit-recipe.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Duck Confit</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Tender duck leg slowly cooked in its own fat.</p>
+                <p class="text-lg font-bold text-gold price">Rs.1 300</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://justcook.butcherbox.com/wp-content/uploads/2020/07/Easy-Butter-Poached-Lobster-760x760.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Lobster Thermidor Dish</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Creamy baked lobster, grated cheese, and a hint of brandy.</p>
+                <p class="text-lg font-bold text-gold price">Rs.1300</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://noseychef.com/wp-content/uploads/2021/10/IMG_8876123.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Sole Meunière</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Lightly pan-fried sole with butter, lemon, and parsley, delicate and classic.</p>
+                <p class="text-lg font-bold text-gold price">Rs.975</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://www.thecomfortofcooking.com/wp-content/uploads/2015/01/GarlicandGoatCheesePotatoGratin-2.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Garlic and Goat Cheese Potato Gratin</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Creamy layered potatoes baked with goat cheese and garlic, golden and savory.</p>
+                <p class="text-lg font-bold text-gold price">Rs.1250</p>
+                <div class="flex text-gold text-xl mb-4">★★★★☆</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://elianarecipes.com/wp-content/uploads/2024/08/Margherita-Pizza-Recipe.png" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2">Pizza Margherita</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Thin crust pizza topped with fresh tomatoes, mozzarella, and basil, simple and fresh.</p>
+                <p class="text-lg font-bold text-gold price">Rs.1250</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://www.acouplecooks.com/wp-content/uploads/2018/04/Pasta-Puttanesca-004.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Pasta</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Cooked pasta tossed with your choice of sauce, comforting and versatile.</p>
+                <p class="text-lg font-bold text-gold price">Rs.1100</p>
+                <div class="flex text-gold text-xl mb-4">★★★☆☆</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+        </div>
+        <h3 class="text-4xl font-heading text-gold mb-8 mt-16 border-b border-gold/50 pb-2" style="color: #ffdb1a">Desserts</h3>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-12" style="color: #ffdb1a">
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://bromabakery.com/wp-content/uploads/2023/01/Molten-Lava-Cakes.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Chocolate Lava Cake</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Light, airy chocolate dessert with a rich, molten center.</p>
+                <p class="text-lg font-bold text-gold price">Rs.250</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://img.freepik.com/premium-photo/classic-new-york-cheesecake-with-creamy-vanilla-filling-berry-compote_1174497-109641.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Cheese cake</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Creamy baked cheesecake with a buttery crust, smooth and indulgent</p>
+                <p class="text-lg font-bold text-gold price">Rs.200</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://img.static-rmg.be/a/view/q75/w/h/3117597/gettyimages-623685812-jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Crème brûlée</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Traditional Yule log cake, chocolate sponge rolled with cream, festive and sweet.</p>
+                <p class="text-lg font-bold text-gold price">Rs.500</p>
+                <div class="flex text-gold text-xl mb-4">★★★★☆</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://i.pinimg.com/736x/a5/4b/6a/a54b6ab3b2442ce12bb6fec93f2e8eed.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Café liégeois</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Coffee-flavored dessert with ice cream and whipped cream, refreshing and bold.</p>
+                <p class="text-lg font-bold text-gold price">Rs.300</p>
+                <div class="flex text-gold text-xl mb-4">★★★★☆</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://flockler.com/thumbs/sites/192/mary-berry-classic-raspberry-mousse_s0x768_q60_noupscale.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Mousse Cup</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Light, fluffy dessert with chocolate or fruit mousse, creamy and delicate.</p>
+                <p class="text-lg font-bold text-gold price">Rs.350</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://sallysbakingaddiction.com/wp-content/uploads/2016/04/easy-nutella-brownies-2-1.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Nutella Brownies </h3>
+                <p class="text-gray-400 text-sm italic mb-4">Rich, fudgy chocolate brownies swirled with Nutella, sweet and irresistible.</p>
+                <p class="text-lg font-bold text-gold price">Rs.250</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <h3 class="text-4xl font-heading text-gold mb-8 mt-16 border-b border-gold/50 pb-2" style="color: #ffdb1a">Beverages</h3>
+        <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-12" style="color: #ffdb1a">
+
+
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://www.iltquotidiano.it/wp-content/uploads/orasi_cappuccino-1200x675-1-1024x576-1.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Latte</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Smooth espresso with steamed milk, creamy and comforting.</p>
+                <p class="text-lg font-bold text-gold price">Rs.350</p>
+                <div class="flex text-gold text-xl mb-4">★★★★☆</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://nishathotels.com/wp-content/uploads/2023/03/img-3.jpg" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Cappuccino</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Espresso topped with frothy milk and a hint of cocoa, balanced and rich.</p>
+                <p class="text-lg font-bold text-gold price">Rs.750</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4" style="color: #ffdb1a">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://img.freepik.com/premium-photo/refreshing-healthy-composition-variety-fruits_943281-57639.jpg"
+                     class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Juice</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Freshly squeezed seasonal fruit juice, refreshing and natural.</p>
+                <p class="text-lg font-bold text-gold price">Rs.300</p>
+                <div class="flex text-gold text-xl mb-4">★★★★☆</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://i.pinimg.com/originals/88/02/91/880291c3ff0ee2c1eb3655e4fe739a2b.jpg"
+                     class="w-full h-40 object-cover rounded-lg mb-4 border border-amber-300 shadow-sm">
+                <h3 class="text-2xl font-heading text-white mb-2">Mojito</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Refreshing mix of mint, lime, sugar, and soda, crisp and invigorating.</p>
+                <p class="text-2xl font-bold price text-gold mb-2">Rs.450</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://s.yimg.com/ny/api/res/1.2/d8LA7xhrqnhsVahzWsmPJQ--/YXBwaWQ9aGlnaGxhbmRlcjt3PTY0MDtoPTk1Mw--/https://media.zenfs.com/en_sg/News/AFPRelax/50_shades_beaut.e280a161145.w640.jpg"
+                     class="w-full h-40 object-cover rounded-md mb-4 border border-amber-300 shadow-sm">
+                <h3 class="text-2xl font-heading text-white mb-2"> Wine</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Carefully selected red or white wine, aromatic and sophisticated.</p>
+                <p class="text-lg font-bold text-gold price">Rs.820</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+            <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+                <img src="https://images.getrecipekit.com/20240923154428-matcha-20frappuccino-20recipe.jpg?class=16x9" class="w-full h-40 object-cover rounded-md mb-4 border border-gold/30">
+                <h3 class="text-2xl font-heading text-white mb-2"> Green Macha</h3>
+                <p class="text-gray-400 text-sm italic mb-4">Whisked Japanese green tea with earthy, vibrant flavors, energizing and smooth.</p>
+                <p class="text-lg font-bold text-gold price">Rs.930</p>
+                <div class="flex text-gold text-xl mb-4">★★★★★</div>
+                <div class="relative mt-4">
+                    <button onclick="addToCart(this)" class="absolute bottom-0 right-0 bg-gold text-black px-5 py-2 rounded-full font-semibold text-sm uppercase tracking-wider shadow-lg hover:bg-yellow-500 hover:scale-110 transition">
+                        Add to Cart
+                    </button>
+                </div>
+            </div>
+        </div>
+        </div>
+
+        </div>
+        </div>
+    </section>
+
+    <!-- Slideshow (Image gallery) -->
+
+    <div class="slideshow-container max-w-7xl mx-auto my-20 relative h-96 md:h-[600px] rounded-xl overflow-hidden shadow-2xl">
+
+        <!-- Slide 1 -->
+        <div class="slide fade absolute inset-0">
+            <img src="https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?w=1400&h=800&fit=crop "
+                 alt="Interior"
+                 class="absolute inset-0 w-full h-full object-cover">
+
+            <!-- TEXT BOX NOW ON THE LEFT -->
+            <div class="relative z-10 mr-auto w-full md:w-6/12 lg:w-5/12 p-8 md:p-12 lg:p-16
+                    flex flex-col justify-center h-full
+                    bg-gradient-to-r from-black/80 via-black/60 to-transparent">
+                <div class="max-w-md text-left">
+                    <h2 class="text-4xl md:text-5xl lg:text-6xl font-heading text-gold mb-6 leading-tight" style="color: #ffdb1a">
+                        Welcome to Gustea's
+                    </h2>
+                    <p class="text-lg md:text-xl text-gray-200 leading-relaxed mb-6" >
+                        We believe in simple luxury: exceptional food served in a warm and inviting atmosphere.
+                        Our talented chef and team craft every dish with passion using only the finest seasonal ingredients.
+                    </p>
+                    <p class="text-gold text-xl font-medium" style="color: #ffdb1a">
+                        An evening to remember awaits.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 2 -->
+        <div class="slide fade absolute inset-0">
+            <img src="https://sitecore-cd.shangri-la.com/-/media/Shangri-La/abudhabi_shangrila/meetings-celebrations/202411_SLAD_Outside-Catering_1920x940.jpg"
+                 alt="Dishes"
+                 class="absolute inset-0 w-full h-full object-cover">
+
+            <div class="relative z-10 mr-auto w-full md:w-6/12 lg:w-5/12 p-8 md:p-12 lg:p-16
+                    flex flex-col justify-center h-full
+                    bg-gradient-to-r from-black/80 via-black/60 to-transparent">
+                <div class="max-w-md text-left">
+                    <h2 class="text-4xl md:text-5xl lg:text-6xl font-heading text-gold mb-6" style="color: #ffdb1a">
+                        Art on Every Plate
+                    </h2>
+                    <p class="text-lg md:text-xl text-gray-200 leading-relaxed mb-6">
+                        Each creation is a masterpiece — beautifully presented,
+                        perfectly balanced, and unforgettable in flavor.
+                    </p>
+                    <p class="text-gold text-xl font-medium" style="color: #ffdb1a">
+                        Taste the difference.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Slide 3 -->
+        <div class="slide fade absolute inset-0">
+            <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1400&h=800&fit=crop "
+                 alt="Pizza"
+                 class="absolute inset-0 w-full h-full object-cover">
+
+            <div class="relative z-10 mr-auto w-full md:w-6/12 lg:w-5/12 p-8 md:p-12 lg:p-16
+                    flex flex-col justify-center h-full
+                    bg-gradient-to-r from-black/80 via-black/60 to-transparent">
+                <div class="max-w-md text-left">
+                    <h2 class="text-4xl md:text-5xl lg:text-6xl font-heading text-gold mb-6" style="color: #ffdb1a">
+                        Reserve Your Table
+                    </h2>
+                    <p class="text-lg md:text-xl text-gray-200 leading-relaxed mb-8">
+                        Limited seats. Unforgettable experiences.
+                        Book now and join us for a night of pure indulgence.
+                    </p>
+
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+</main>
+
+
+<!-- Footer -->
+<footer class="mt-20 py-16 px-6 sm:px-8">
+    <div class="footer-grid max-w-7xl mx-auto grid md:grid-cols-3 gap-10">
+        <div class="col">
+            <h3 class="text-3xl text-gold mb-4" style="color: #ffdb1a">Gustea's Restaurant</h3>
+            <p class="text-gray-400">An exquisite journey where culinary passion meets the plate.</p>
+        </div>
+        <div class="col contact-info">
+            <h4 class="text-xl text-gold mb-4" style="color: #ffdb1a">Reservations & Contact</h4>
+            <p class="text-gray-400">5 Rue de Rivoli, Paris, France<br>
+                <a href="/cdn-cgi/l/email-protection#04666b6a6e6b717644637177706165772a676b69" class="hover:text-gold transition"><span class="__cf_email__" data-cfemail="0a68656460657f784a6d7f797e6f6b7924696567">[email&#160;protected]</span></a><br>
+                <a href="tel:+33123456789" class="hover:text-gold transition">+011 23 45 67 89</a></p>
+        </div>
+        <div class="col">
+            <h4 class="text-xl text-gold mb-4" style="color: #ffdb1a">Connect</h4>
+            <div class="social-links text-gray-400">
+                <a href="#" class="hover:text-gold transition">Facebook</a> |
+                <a href="#" class="hover:text-gold transition">Twitter</a> |
+                <a href="#" class="hover:text-gold transition">Instagram</a>
+            </div>
+        </div>
+    </div>
+    <div class="copyright text-center pt-10 text-gray-600 border-t border-zinc-800 mt-10">
+        © 2025 Gustea's Restaurant. All rights reserved. | Crafted with Elegance.
+    </div>
+</footer>
+
+<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+    // --- SLIDESHOW JS (Unchanged) ---
+    let slideIndex = 0;
+    showSlides();
+
+    function plusSlides(n) {
+        slideIndex += n;
+        showSlides();
+    }
+
+    function showSlides() {
+        let slides = document.getElementsByClassName("slide");
+        if (slides.length === 0) return; // Prevent error if no slides exist
+
+        if (slideIndex >= slides.length) slideIndex = 0;
+        if (slideIndex < 0) slideIndex = slides.length - 1;
+
+        for (let i = 0; i < slides.length; i++) {
+            slides[i].style.display = "none";
+        }
+        slides[slideIndex].style.display = "block";
+    }
+
+    // Auto slide every 4 seconds
+    setInterval(() => {
+        slideIndex++;
+        showSlides();
+    }, 4000);
+</script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', (event) => {
+        let currentSlide = 0;
+        const slides = document.querySelectorAll('.menu-slide');
+        const prevButton = document.getElementById('prev-slide');
+        const nextButton = document.getElementById('next-slide');
+
+        // Check if slides exist before trying to use them
+        if (slides.length === 0) {
+            console.warn("No elements found with class 'menu-slide'. Slider initialization stopped.");
+            return;
+        }
+
+        function updateSlideDisplay() {
+            // 1. Hide all slides and then show only the current one
+            slides.forEach((slide, index) => {
+                if (index === currentSlide) {
+                    slide.style.display = 'grid';
+                } else {
+                    slide.style.display = 'none';
+                }
+            });
+
+            // 2. Control Button Visual State (Opacity/Cursor)
+            prevButton.style.opacity = currentSlide === 0 ? '0.3' : '1';
+            prevButton.style.cursor = currentSlide === 0 ? 'default' : 'pointer';
+
+            nextButton.style.opacity = currentSlide === slides.length - 1 ? '0.3' : '1';
+            nextButton.style.cursor = currentSlide === slides.length - 1 ? 'default' : 'pointer';
+        }
+
+        // Define the changeSlide function globally so the HTML buttons can call it
+        window.changeSlide = function(n) {
+            let newSlide = currentSlide + n;
+
+            // Check boundaries
+            if (newSlide >= 0 && newSlide < slides.length) {
+                currentSlide = newSlide;
+                updateSlideDisplay();
+            }
+        }
+
+        updateSlideDisplay();
+    });
+
+</script>
+
+<!-- CART SYSTEM -->
+<script>
+    let cart = JSON.parse(localStorage.getItem('gusteaCart') || '[]');
+
+    function addToCart(button) {
+        const card = button.closest('.bg-zinc-800');
+        if (!card) {
+            console.error("Cannot find menu item card");
+            return;
+        }
+
+        const nameEl = card.querySelector('h3');
+        const priceEl = card.querySelector('.price');
+
+        if (!nameEl || !priceEl) {
+            console.error("Missing name or price element");
+            return;
+        }
+
+        const name = nameEl.textContent.trim();
+
+        // Clean price: "Rs.1 300" → "1300" → number
+        let priceText = priceEl.textContent.trim();
+        priceText = priceText.replace(/Rs\.|\s+|,/g, '');   // remove Rs. , spaces, commas
+        const price = parseFloat(priceText) || 0;
+
+        if (price <= 0) {
+            console.warn(`Invalid price for ${name}: "${priceText}"`);
+        }
+
+        // Load current cart
+        let cart = JSON.parse(localStorage.getItem('gusteaCart') || '[]');
+
+        // Find if already in cart
+        const existing = cart.find(item => item.name === name);
+        if (existing) {
+            existing.qty += 1;
+        } else {
+            cart.push({ name, price, qty: 1 });
+        }
+
+        // Save back
+        localStorage.setItem('gusteaCart', JSON.stringify(cart));
+
+        updateCartBadge();
+
+        // Optional: toast (if you have the toast element)
+        const toast = document.getElementById('cart-toast');
+        if (toast) {
+            document.getElementById('toast-msg').textContent = `${name} added to cart`;
+            toast.classList.remove('translate-y-16', 'opacity-0');
+            toast.classList.add('translate-y-0', 'opacity-100');
+            setTimeout(() => {
+                toast.classList.remove('translate-y-0', 'opacity-100');
+                toast.classList.add('translate-y-16', 'opacity-0');
+            }, 3000);
+        }
+    }
+
+    function updateCartBadge() {
+        const cart = JSON.parse(localStorage.getItem('gusteaCart') || '[]');
+        const totalQty = cart.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+        const badge = document.getElementById('cart-badge');
+        if (badge) {
+            badge.textContent = totalQty;
+            badge.style.opacity = totalQty > 0 ? '1' : '0';
+        }
+    }
+
+    // Make sure badge updates when page loads
+    document.addEventListener('DOMContentLoaded', updateCartBadge);
+    // Run when page loads
+    document.addEventListener('DOMContentLoaded', updateCartBadge);
+</script>
+<!-- Toast Notification - Add to Cart Success -->
+<div id="cart-toast" class="fixed bottom-8 right-8 z-50 transform translate-y-16 opacity-0 transition-all duration-500 ease-out flex items-center space-x-4 bg-zinc-900 border border-gold/50 text-white px-6 py-4 rounded-xl shadow-2xl">
+    <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <div>
+        <p class="font-semibold" id="toast-msg">Added to cart!</p>
+        <p class="text-sm text-gray-400">Check your cart</p>
+    </div>
+</div>
+<script>
+    // 1. Initialize or load the cart from Local Storage
+    let cart = JSON.parse(localStorage.getItem('restaurantCart')) || {};
+
+    /**
+     * Adds an item to the cart and saves it to Local Storage.
+     * @param {HTMLElement} buttonElement - The 'Add to Cart' button element.
+     */
+    function addToCart(buttonElement) {
+        console.log("--- Add to Cart Clicked ---");
+        const itemDiv = buttonElement.closest('.bg-zinc-800, .bg-yellow-50');
+
+        if (!itemDiv) {
+            console.error("ERROR: Could not find parent item container. Check class '.bg-zinc-800'.");
+            return;
+        }
+
+
+
+        // Item Name
+        const itemName = itemDiv.querySelector('h3').textContent.trim();
+
+        // Item Price (MUST use the .price class and remove the '$')
+        const priceElement = itemDiv.querySelector('.price');
+
+        if (!priceElement) {
+            console.error(`ERROR: Price element not found for ${itemName}. Check for class '.price' on the price tag.`);
+            return;
+        }
+
+        const itemPriceText = priceElement.textContent;
+        const itemPrice = parseFloat(itemPriceText.replace('Rs. ', '').trim()); // Clean and convert
+
+        if (isNaN(itemPrice)) {
+            console.error(`ERROR: Price parsing failed for ${itemName}. Value found: ${itemPriceText}`);
+            return;
+        }
+
+        // --- Cart Logic ---
+
+        if (cart[itemName]) {
+            cart[itemName].quantity += 1;
+        } else {
+            cart[itemName] = {
+                price: itemPrice,
+                quantity: 1
+            };
+        }
+
+        // --- Save to Local Storage ---
+        localStorage.setItem('restaurantCart', JSON.stringify(cart));
+
+        console.log(`SUCCESS: Cart saved! Item: ${itemName}, Quantity: ${cart[itemName].quantity}`);
+        console.log("Full Cart<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9d60d9dd49125137',t:'MTc3MjQ1OTIyMi4wMDAwMDA='};
+        var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();
+        </script>

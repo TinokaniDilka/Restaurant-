@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GUSTEA'S Secure Checkout</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}" href="/css/style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        :root {
+            --bg-dark: #000000;
+            --container-dark: #0a0a0a;
+            --accent-gold: #ffdb1a;
+            --text-light: #f0f0f0;
+            --text-muted: #aaaaaa;
+            --border-dark: #222222;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            background-color: var(--bg-dark);
+            color: var(--text-light);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .checkout-container {
+            display: flex;
+            max-width: 1100px;
+            margin: 0 auto;
+            background-color: var(--container-dark);
+            border-radius: 12px;
+            overflow: hidden;
+            border: 1px solid #111;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
+        }
+
+        .checkout-form {
+            flex: 2;
+            padding: 40px;
+            border-right: 1px solid var(--border-dark);
+        }
+
+        .checkout-form h2,
+        .order-summary h3 {
+            color: var(--accent-gold);
+            margin-bottom: 24px;
+            font-family: Georgia, serif;
+        }
+
+        .section-header {
+            margin-top: 32px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--border-dark);
+            color: var(--accent-gold);
+        }
+
+        .input-group {
+            margin-bottom: 24px;
+        }
+
+        .input-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #ddd;
+        }
+
+        .input-group input,
+        .input-group select {
+            width: 100%;
+            padding: 14px;
+            border: 1px solid #333;
+            border-radius: 6px;
+            background-color: #111;
+            color: white;
+            font-size: 1rem;
+        }
+
+        .input-group input:focus {
+            border-color: var(--accent-gold);
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(255,219,26,0.15);
+        }
+
+        .input-row {
+            display: flex;
+            gap: 20px;
+        }
+
+        .input-row .input-group {
+            flex: 1;
+        }
+
+        .payment-selection {
+            display: flex;
+            gap: 16px;
+            margin: 24px 0;
+        }
+
+        .payment-option {
+            flex: 1;
+            padding: 16px;
+            border: 1px solid #333;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .payment-option:has(input:checked) {
+            border-color: var(--accent-gold);
+            background-color: #1a1400;
+        }
+
+        .payment-option label {
+            color: #eee;
+            font-weight: 600;
+        }
+
+        #card-details-container {
+            border-top: 1px solid #222;
+            padding-top: 24px;
+            margin-top: 20px;
+        }
+
+        .order-summary {
+            flex: 1;
+            padding: 40px;
+            background-color: #050505;
+            border-left: 1px solid #111;
+        }
+
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            color: #ccc;
+        }
+
+        .summary-total {
+            display: flex;
+            justify-content: space-between;
+            font-size: 1.3rem;
+            font-weight: bold;
+            color: white;
+            margin-top: 20px;
+            padding-top: 16px;
+            border-top: 1px solid #222;
+        }
+
+        .pay-button {
+            width: 100%;
+            background-color: var(--accent-gold);
+            color: #000;
+            border: none;
+            padding: 16px;
+            font-size: 1.1rem;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            margin-top: 32px;
+            transition: all 0.25s;
+        }
+
+        .pay-button:hover {
+            background-color: #ffea70;
+            transform: translateY(-2px);
+        }
+
+        .back-button {
+            background-color: transparent;
+            border: 2px solid #555;
+            color: #ccc;
+        }
+
+        .back-button:hover {
+            background-color: #222;
+            color: white;
+        }
+
+        @media (max-width: 768px) {
+            .checkout-container {
+                flex-direction: column;
+            }
+            .checkout-form {
+                border-right: none;
+                border-bottom: 1px solid #222;
+            }
+            .order-summary {
+                border-left: none;
+            }
+            .input-row {
+                flex-direction: column;
+                gap: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="checkout-container">
+    <main class="checkout-form">
+        <h1 class="text-5xl md:text-6xl font-heading text-gold text-center mb-12">Checkout</h1>
+
+        <form action="/process-order" method="POST">
+
+            <h2 class="section-header">Contact & Delivery Details</h2>
+
+            <div class="input-group">
+                <label for="email">Email Address</label>
+                <input type="email" id="email" name="email" required placeholder="example@email.com">
+            </div>
+
+            <!-- Add more fields as needed: name, phone, address, etc. -->
+
+            <!-- Payment method selection (example) -->
+            <h2 class="section-header mt-10">Payment Method</h2>
+            <div class="payment-selection">
+                <div class="payment-option">
+                    <input type="radio" id="cod" name="payment" value="cod" checked>
+                    <label for="cod">Cash on Delivery</label>
+                </div>
+                <div class="payment-option">
+                    <input type="radio" id="card" name="payment" value="card">
+                    <label for="card">Card Payment</label>
+                </div>
+            </div>
+
+            <div id="card-details-container" style="display: none;">
+                <div class="input-group">
+                    <label for="card-number">Card Number</label>
+                    <input type="text" id="card-number" name="card_number" placeholder="1234 5678 9012 3456">
+                </div>
+                <div class="input-row">
+                    <div class="input-group">
+                        <label for="expiry">Expiry (MM/YY)</label>
+                        <input type="text" id="expiry" name="expiry" placeholder="01/28">
+                    </div>
+                    <div class="input-group">
+                        <label for="cvv">CVV</label>
+                        <input type="text" id="cvv" name="cvv" placeholder="123">
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" id="place-order-btn" class="pay-button">Place Order</button>
+            <button type="button" id="back-to-cart-btn" class="pay-button back-button">← Back to Cart</button>
+
+        </form>
+    </main>
+
+    <aside class="order-summary">
+        <h3>Order Summary</h3>
+        <div id="cart-items-container"></div>
+
+        <hr style="border-color: #222; margin: 20px 0;">
+
+        <div class="summary-item">
+            <span>Subtotal</span>
+            <span id="subtotal">Rs. 0.00</span>
+        </div>
+        <div class="summary-item">
+            <span>Delivery Fee</span>
+            <span id="shipping-fee">Rs. 50.00</span>
+        </div>
+        <div class="summary-total">
+            <span>Total Payable</span>
+            <span id="total-payable" style="color: var(--accent-gold);">Rs. 0.00</span>
+        </div>
+    </aside>
+</div>
+
+<script>
+    // Your existing JavaScript (toggle card details, display summary, place order, etc.)
+    // ... paste your previous script here ...
+
+    // Just make sure these lines exist:
+    document.addEventListener('DOMContentLoaded', () => {
+        displayOrderSummary();
+        toggleCardDetails();
+    });
+
+    // Example minimal version of displayOrderSummary (adjust as needed)
+    function displayOrderSummary() {
+        const cart = JSON.parse(localStorage.getItem('gusteaCart') || '[]');
+        const container = document.getElementById('cart-items-container');
+        const subtotalEl = document.getElementById('subtotal');
+        const totalEl = document.getElementById('total-payable');
+
+        container.innerHTML = '';
+        let subtotal = 0;
+
+        cart.forEach(item => {
+            const itemTotal = item.price * item.qty;
+            subtotal += itemTotal;
+
+            container.innerHTML += `
+            <div class="summary-item">
+                <span>${item.name} × ${item.qty}</span>
+                <span>Rs. ${itemTotal.toFixed(2)}</span>
+            </div>
+        `;
+        });
+
+        const shipping = 50;
+        const total = subtotal + shipping;
+
+        subtotalEl.textContent = `Rs. ${subtotal.toFixed(2)}`;
+        totalEl.textContent = `Rs. ${total.toFixed(2)}`;
+    }
+
+    const cardRadio = document.getElementById('card');
+    const codRadio = document.getElementById('cod');
+    const cardContainer = document.getElementById('card-details-container');
+
+    function toggleCardDetails() {
+        cardContainer.style.display = cardRadio.checked ? 'block' : 'none';
+    }
+
+    cardRadio?.addEventListener('change', toggleCardDetails);
+    codRadio?.addEventListener('change', toggleCardDetails);
+
+    document.getElementById('place-order-btn')?.addEventListener('click', () => {
+        alert('Order Placed Successfully!');
+        localStorage.removeItem('gusteaCart');
+        window.location.href = '/index';
+    });
+
+    document.getElementById('back-to-cart-btn')?.addEventListener('click', () => {
+        window.location.href = '/cart';
+    });
+</script>
+
+</body>
+</html>

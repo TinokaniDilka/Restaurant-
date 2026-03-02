@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <link rel="stylesheet" th:href="@{/css/style.css}" href="/css/style.css">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Cart - Gustea's Restaurant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+</head>
+<body class="antialiased bg-black text-white">
+<header class="fixed top-0 left-0 right-0 z-50 bg-black border-b border-gray-800 shadow-lg">
+    <div class="max-w-7xl mx-auto flex justify-between items-center px-6 py-4">
+        <!-- Left nav items -->
+        <nav class="navbar-left">
+            <ul class="flex space-x-8">
+                <li><a href="/index" class="text-sm uppercase tracking-wider" style="color: #ffdb1a;">Home</a></li>
+                <li><a href="#menu" class="hover:text-gold transition" style="color: #ffdb1a;">Menu</a></li>
+            </ul>
+        </nav>
+
+        <!-- Centered logo -->
+        <h1 class="text-5xl md:text-6xl logo mb-3" style="color: #ffdb1a;">Gustea's</h1>
+
+        <!-- Right nav items -->
+        <nav class="navbar-right">
+            <ul class="flex space-x-8">
+                <li><a href="/reservation" class="text-sm uppercase tracking-wider" style="color: #ffdb1a;">Reservations</a></li>
+                <li class="relative">
+                    <a href="/cart" class="hover:text-gold transition" style="color: #ffdb1a;">Cart</a>
+                    <span id="cart-badge" class="absolute -top-3 -right-6 bg-red-600 text-white text-xs rounded-full w-6 h-6 flex items-center justify-center font-bold opacity-0 transition">
+                        0
+                    </span>
+                </li>
+            </ul>
+        </nav>
+    </div>
+    <hr style="border-color: #fffdfd;">
+</header>
+
+<main class="max-w-5xl mx-auto px-6 py-24">
+    <br>
+    <br>
+    <h1 class="text-6xl font-heading text-gold text-center mb-16">Your Cart</h1>
+
+    <div id="cart-items" class="space-y-8 mb-12"></div>
+
+    <!-- Empty Cart -->
+    <div id="empty-cart" class="text-center py-20 hidden">
+        <p class="text-3xl text-gray-500 mb-8">Your cart is empty</p>
+        <a href="/#menu" class="inline-block bg-gold text-black px-10 py-4 rounded-full font-bold hover:bg-yellow-500 transition shadow-xl">
+            Browse Menu
+        </a>
+    </div>
+
+    <!-- Footer -->
+    <div id="cart-footer" class="hidden mt-12 pt-8 border-t border-zinc-700">
+        <div class="flex justify-between items-center mb-10">
+            <h2 class="text-4xl font-heading text-gold">Total</h2>
+            <p class="text-5xl font-bold text-gold">Rs. <span id="cart-total">0</span></p>
+        </div>
+
+        <div class="flex flex-col sm:flex-row gap-6">
+            <button id="clear-cart" class="flex-1 border-2 border-red-600 text-red-400 px-12 py-5 rounded-full font-semibold hover:bg-red-500 hover:text-black transition">
+                Clear Cart</button>
+
+            <a href="/checkout">
+                <button
+                        id="checkout-btn"
+                        class="flex-1 bg-yellow-400 text-black font-heading px-12 py-5 rounded-full font-bold hover:bg-yellow-500 transition shadow-2xl">
+                    Proceed to Checkout
+                </button>
+            </a>
+        </div>
+
+        <div class="text-center mt-10">
+            <a href="/index" class="text-black hover:underline">Continue Shopping</a>
+        </div>
+    </div>
+</main>
+
+
+<div id="toast" class="fixed bottom-8 right-8 z-50 transform translate-y-20 opacity-0 transition-all duration-500 ease-out flex items-center space-x-4 bg-zinc-900 border border-gold/40 text-white px-6 py-4 rounded-xl shadow-2xl max-w-sm">
+    <svg id="toast-icon" class="w-8 h-8 text-green-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <div>
+        <p class="font-semibold" id="toast-message">Added!</p>
+        <p class="text-sm text-gray-400" id="toast-subtext"></p>
+    </div>
+</div>
+
+<script>
+    let cart = JSON.parse(localStorage.getItem('gusteaCart') || '[]');
+
+    const cartItemsEl = document.getElementById('cart-items');
+    const emptyCartEl = document.getElementById('empty-cart');
+    const cartFooterEl = document.getElementById('cart-footer');
+    const totalEl = document.getElementById('cart-total');
+    const badgeEl = document.getElementById('cart-badge');
+
+    // Toast Function
+    function showToast(message, subtext = "", isError = false) {
+        const toast = document.getElementById('toast');
+        const msgEl = document.getElementById('toast-message');
+        const subEl = document.getElementById('toast-subtext');
+        const icon = document.getElementById('toast-icon');
+
+        msgEl.textContent = message;
+        subEl.textContent = subtext;
+
+        if (isError) {
+            icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"/>`;
+            icon.classList.replace('text-green-400', 'text-red-400');
+        } else {
+            icon.innerHTML = `<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>`;
+            icon.classList.replace('text-red-400', 'text-green-400');
+        }
+
+        toast.classList.remove('translate-y-20', 'opacity-0');
+        toast.classList.add('translate-y-0', 'opacity-100');
+
+        setTimeout(() => {
+            toast.classList.remove('translate-y-0', 'opacity-100');
+            toast.classList.add('translate-y-20', 'opacity-0');
+        }, 3000);
+    }
+
+    function updateBadge() {
+        const total = cart.reduce((sum, i) => sum + i.qty, 0);
+        badgeEl.textContent = total;
+        badgeEl.style.opacity = total > 0 ? '1' : '0';
+    }
+
+    function renderCart() {
+        updateBadge();
+
+        if (cart.length === 0) {
+            emptyCartEl.classList.remove('hidden');
+            cartFooterEl.classList.add('hidden');
+            cartItemsEl.innerHTML = '';
+            return;
+        }
+
+        emptyCartEl.classList.add('hidden');
+        cartFooterEl.classList.remove('hidden');
+
+        cartItemsEl.innerHTML = cart.map((item, idx) => `
+    <div class="bg-zinc-800 p-6 rounded-lg shadow-lg border border-zinc-700 hover:border-gold transition">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div>
+                <h3 class="text-3xl font-heading text-white">${item.name}</h3>
+                <!-- Removed the "Rs. ${item.price} each" line -->
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-4 bg-zinc-900 px-6 py-3 rounded-full">
+                    <button onclick="changeQty(${idx}, -1)" class="text-gold text-2xl hover:text-yellow-400">-</button>
+                    <span class="text-white text-2xl font-bold w-12 text-center">${item.qty}</span>
+                    <button onclick="changeQty(${idx}, 1)" class="text-gold text-2xl hover:text-yellow-400">+</button>
+                </div>
+                <button onclick="removeItem(${idx})" class="text-red-400 hover:text-red-300 underline">Remove</button>
+            </div>
+        </div>
+        <div class="mt-4 text-right text-2xl text-gold font-bold">
+            Rs. ${(item.price * item.qty).toFixed(2)}
+        </div>
+    </div>
+`).join('');
+
+        const total = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+        totalEl.textContent = total.toFixed(2);
+    }
+
+    // Updated functions with TOAST
+    window.changeQty = function(index, change) {
+        const oldQty = cart[index].qty;
+        cart[index].qty += change;
+
+        if (cart[index].qty <= 0) {
+            const name = cart[index].name;
+            cart.splice(index, 1);
+            showToast(`${name} removed`, "Quantity reached 0");
+        } else {
+            const action = change > 0 ? "Increased" : "Decreased";
+            showToast(`${cart[index].name} ${action}`, `${oldQty} → ${cart[index].qty} item${cart[index].qty > 1 ? 's' : ''}`);
+        }
+
+        localStorage.setItem('gusteaCart', JSON.stringify(cart));
+        renderCart();
+    };
+
+    window.removeItem = function(index) {
+        const name = cart[index].name;
+        cart.splice(index, 1);
+        localStorage.setItem('gusteaCart', JSON.stringify(cart));
+        renderCart();
+        showToast(`${name} removed from cart`);
+    };
+
+    document.getElementById('clear-cart').onclick = () => {
+        if (confirm('Clear entire cart?')) {
+            const count = cart.length;
+            cart = [];
+            localStorage.removeItem('gusteaCart');
+            renderCart();
+            showToast('Cart cleared', `${count} item${count > 1 ? 's' : ''} removed`);
+        }
+    };
+
+
+
+    // Start
+    renderCart();
+</script>
+
+</body>
+</html>

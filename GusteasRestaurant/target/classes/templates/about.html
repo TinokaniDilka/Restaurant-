@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta th:replace="fragments/layout :: head_config(pageTitle='About Us | Gustea\'s')">
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="antialiased">
+
+<!-- Modal for Notifications -->
+<div th:replace="fragments/layout :: modal"></div>
+
+<!-- Header (Fixed Navigation) -->
+<header th:replace="fragments/layout :: header(currentPage='about')"></header>
+
+<main class="pt-[90px]">
+    <section id="about-us" class="max-w-5xl mx-auto py-20 px-6 sm:px-8">
+        <h2 class="text-6xl text-center font-heading text-gold mb-16">The Story of Gustea's</h2>
+
+        <!-- Image placeholder - Use one of your provided images -->
+        <div class="mb-12 rounded-lg overflow-hidden shadow-2xl border-2 border-gold/20">
+            <img th:src="@{/images/slide2.jpg}" alt="Gustea's Restaurant Interior" class="w-full h-96 object-cover" onerror="this.onerror=null; this.src='https://placehold.co/1000x384/1C1C1C/D4AF37?text=Our+Interior+View'">
+        </div>
+
+        <article class="space-y-8 text-lg text-gray-300">
+            <p>
+                Gustea's Restaurant was founded in 2025 in the heart of Paris by a collective of master chefs dedicated to reviving the classical French dining experience while embracing modern techniques. Our name, derived from a blend of 'Gustus' (Latin for taste) and 'Aether' (referencing the sublime), reflects our commitment to creating meals that are both profoundly flavorful and light years beyond the ordinary.
+            </p>
+            <p>
+                Our philosophy is simple: **"Anyone can cook, but only a few can master the experience."** We source our ingredients from small, sustainable farms across France, ensuring that every element on your plate is of the highest quality and freshness. We take pride in our zero-waste approach and commitment to ethical sourcing.
+            </p>
+            <p>
+                From the moment you step inside, you are enveloped in an atmosphere of quiet, unpretentious luxury. The dark wood, the subtle gleam of gold accents, and the perfectly curated lighting are all designed to elevate your focus to the sensory experience of the cuisine. We invite you to join us for an unforgettable journey.
+            </p>
+        </article>
+
+        <div class="text-center mt-16">
+            <a th:href="@{/contact}" class="cta-button py-3 px-8 rounded-lg text-xl hover:no-underline">Book Your Experience Today</a>
+        </div>
+    </section>
+</main>
+
+<!-- Footer -->
+<footer th:replace="fragments/layout :: footer"></footer>
+
+
+</body>
+</html>

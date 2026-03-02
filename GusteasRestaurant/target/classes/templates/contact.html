@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta th:replace="fragments/layout :: head_config(pageTitle='Contact | Gustea\'s')">
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, addDoc, collection, query, orderBy, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- GLOBAL FIREBASE SETUP ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let db;
+        let auth;
+        let userId = 'loading';
+        let isAuthReady = false; // New flag to track authentication completion
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            if (Object.keys(firebaseConfig).length === 0) {
+                console.error("Firebase configuration is missing. Cannot initialize Firestore.");
+                return;
+            }
+
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                // Use onAuthStateChanged to ensure listeners start only after authentication is complete
+                onAuthStateChanged(auth, (user) => {
+                    isAuthReady = true;
+                    if (user) {
+                        userId = user.uid;
+                        console.log("Firebase initialized. User ID:", userId);
+
+                        // Show user ID in the reservations section
+                        const userIdDisplay = document.getElementById('user-id-display-res');
+                        if (userIdDisplay) {
+                            userIdDisplay.textContent = `Your ID: ${userId} (Highlighted rows are yours)`;
+                        }
+
+                        // Start listeners for real-time data ONLY after successful auth
+                        setupReservationListener(db, userId, appId);
+                    } else {
+                        // If no user is signed in (shouldn't happen with anon/custom token but good practice)
+                        userId = crypto.randomUUID();
+                        console.log("Firebase initialized. Anonymous User ID generated:", userId);
+                        setupReservationListener(db, userId, appId);
+                    }
+                });
+
+                // Initial sign-in attempt
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+            } catch (error) {
+                console.error("Error during Firebase initialization or sign-in:", error);
+                const userIdDisplay = document.getElementById('user-id-display-res');
+                if (userIdDisplay) {
+                    userIdDisplay.textContent = 'Authentication Failed';
+                }
+            }
+        });
+
+        // Helper to get the correct Firestore collection path for public data
+        function getPublicCollectionRef(db, collectionName) {
+            return collection(db, `artifacts/${appId}/public/data/${collectionName}`);
+        }
+
+        async function submitReservation(event) {
+            event.preventDefault();
+
+            // Check if auth is ready before attempting submission
+            if (!db || !isAuthReady || !userId || userId === 'loading') {
+                showModal('System not ready. Please wait a moment for authentication.', false);
+                return;
+            }
+
+            const name = document.getElementById('res-name').value.trim();
+            const date = document.getElementById('res-date').value;
+            const time = document.getElementById('res-time').value;
+            const guests = parseInt(document.getElementById('res-guests').value);
+
+            if (!name || !date || !time || !guests || guests < 1) {
+                showModal('Please ensure all fields are filled correctly.', false);
+                return;
+            }
+
+            const reservationData = {
+                userId: userId,
+                name: name,
+                datetime: new Date(`${date}T${time}`),
+                guests: guests,
+                status: 'Pending',
+                createdAt: serverTimestamp()
+            };
+
+            const reservationsRef = getPublicCollectionRef(db, 'reservations');
+            try {
+                await addDoc(reservationsRef, reservationData);
+                showModal('Reservation submitted successfully! We will confirm soon.', true);
+                event.target.reset(); // Clear form
+            } catch (e) {
+                console.error("Error adding document: ", e);
+                showModal(`Error submitting reservation: ${e.message}`, false);
+            }
+        }
+
+        function setupReservationListener(db, currentUserId, appId) {
+            // This function is now only called when authentication is confirmed.
+            const reservationsRef = getPublicCollectionRef(db, 'reservations');
+
+            const q = query(reservationsRef); // Fetching without explicit orderBy
+
+            onSnapshot(q, (snapshot) => {
+                const reservationsList = document.getElementById('reservations-list');
+                if (!reservationsList) return;
+                reservationsList.innerHTML = ''; // Clear existing list
+
+                // Client-side sorting by createdAt (descending)
+                const sortedReservations = [];
+                snapshot.forEach(doc => {
+                    const data = doc.data();
+                    // Store the document data along with its ID and timestamp for sorting
+                    sortedReservations.push({
+                        id: doc.id,
+                        ...data,
+                        timestamp: data.createdAt ? data.createdAt.seconds * 1000 : 0 // Use timestamp for sorting
+                    });
+                });
+
+                // Sort the array by timestamp (most recent first)
+                sortedReservations.sort((a, b) => b.timestamp - a.timestamp);
+
+                sortedReservations.forEach((data) => {
+                    const isUserReservation = data.userId === currentUserId;
+                    const statusColor = data.status === 'Confirmed' ? 'text-green-400' : (data.status === 'Cancelled' ? 'text-red-400' : 'text-yellow-400');
+                    // Format timestamp
+                    const dateStr = data.datetime ? new Date(data.datetime.seconds * 1000).toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short' }) : 'N/A';
+
+                    const listItem = document.createElement('li');
+                    // Show full userId for other users to see
+                    const displayUserId = isUserReservation ? 'You' : data.userId;
+
+                    listItem.className = `p-4 flex justify-between items-center transition duration-200 ${isUserReservation ? 'bg-zinc-800 border-l-4 border-gold' : 'bg-zinc-900 border-b border-zinc-700'}`;
+
+                    listItem.innerHTML = `
+                        <div>
+                            <p class="text-white font-medium">${data.name} - ${data.guests} Guests</p>
+                            <p class="text-sm text-gray-400">${dateStr} | By: ${displayUserId}</p>
+                        </div>
+                        <span class="${statusColor} font-bold text-sm">${data.status}</span>
+                    `;
+                    reservationsList.appendChild(listItem);
+                });
+            }, (error) => {
+                console.error("Error fetching real-time reservations:", error);
+                document.getElementById('reservations-list').innerHTML = `<li class="p-4 text-red-400">Error loading reservations.</li>`;
+            });
+        }
+
+        // --- UI/MODAL FUNCTIONS (Copied from previous file) ---
+        function showModal(message, isSuccess) {
+            const modal = document.getElementById('app-modal');
+            const content = document.getElementById('modal-message');
+            const icon = document.getElementById('modal-icon');
+
+            if (!modal) return; // Guard clause if modal fragment isn't loaded
+
+            content.textContent = message;
+
+            if (isSuccess) {
+                icon.innerHTML = `<svg class="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+            } else {
+                icon.innerHTML = `<svg class="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>`;
+            }
+
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 3000);
+        }
+
+        // Attach function to the global scope for HTML access
+        window.submitReservation = submitReservation;
+        window.showModal = showModal; // also expose modal helper
+    </script>
+
+</head>
+<body class="antialiased">
+
+<!-- Modal for Notifications -->
+<div th:replace="fragments/layout :: modal"></div>
+
+<!-- Header (Fixed Navigation) -->
+<header th:replace="fragments/layout :: header(currentPage='contact')"></header>
+
+<main class="pt-[90px]">
+    <section id="contact-reservations" class="max-w-7xl mx-auto py-20 px-6 sm:px-8">
+        <h2 class="text-6xl text-center font-heading text-gold mb-16">Contact & Reservations</h2>
+
+        <div class="grid lg:grid-cols-3 gap-12">
+
+            <!-- Contact Info Column -->
+            <div class="lg:col-span-1 bg-zinc-800 p-8 rounded-lg shadow-xl border border-gold/20 h-full">
+                <h3 class="text-3xl font-heading text-white mb-6">Reach Out to Us</h3>
+                <address class="not-italic space-y-4 text-gray-300">
+                    <p class="font-bold text-gold">Location:</p>
+                    <p>5 Rue de Rivoli, 75004 Paris, France</p>
+
+                    <p class="font-bold text-gold pt-4">Email:</p>
+                    <p><a href="mailto:bonjour@gusteas.com" class="hover:text-gold transition">bonjour@gusteas.com</a></p>
+
+                    <p class="font-bold text-gold pt-4">Phone:</p>
+                    <p><a href="tel:+33123456789" class="hover:text-gold transition">+33 1 23 45 67 89</a></p>
+
+                    <p class="font-bold text-gold pt-4">Hours:</p>
+                    <p>Tuesday - Saturday: 6:00 PM - 11:00 PM<br>Closed Sunday & Monday</p>
+                </address>
+            </div>
+
+            <!-- Reservation Form Column -->
+            <div class="lg:col-span-2 bg-zinc-800 p-8 rounded-lg shadow-xl border border-gold/20">
+                <h3 class="text-3xl font-heading text-white mb-6">Book Your Table Now</h3>
+                <form id="reservation-form" onsubmit="window.submitReservation(event)">
+                    <div class="space-y-6">
+                        <div>
+                            <label for="res-name" class="block text-sm font-medium text-gray-300 mb-1">Your Name</label>
+                            <input type="text" id="res-name" class="w-full p-3 bg-zinc-900 border border-zinc-700 rounded-md text-white focus:ring-gold focus:border-gold" required>
+                        </div>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                            <div>
+                                <label for="res-date" class="block text-sm font-medium text-gray-300 mb-1">Date</label>
+                                <input type="date" id="res-date" class="w-full p-3 bg-zinc-900 border border-zinc-700 rounded-md text-white focus:ring-gold focus:border-gold" required>
+                            </div>
+                            <div>
+                                <label for="res-time" class="block text-sm font-medium text-gray-300 mb-1">Time</label>
+                                <input type="time" id="res-time" class="w-full p-3 bg-zinc-900 border border-zinc-700 rounded-md text-white focus:ring-gold focus:border-gold" required>
+                            </div>
+                            <div>
+                                <label for="res-guests" class="block text-sm font-medium text-gray-300 mb-1">Guests</label>
+                                <input type="number" id="res-guests" min="1" max="10" class="w-full p-3 bg-zinc-900 border border-zinc-700 rounded-md text-white focus:ring-gold focus:border-gold" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="cta-button w-full py-3 rounded-md text-lg">
+                            Submit Reservation Request
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Existing Reservations List -->
+        <div class="bg-zinc-900 p-8 rounded-lg shadow-xl border border-zinc-700 mt-12">
+            <h3 class="text-3xl font-heading text-gold mb-6">Real-Time Bookings</h3>
+            <p id="user-id-display-res" class="text-sm text-gray-500 mb-4">Loading user ID...</p>
+            <ul id="reservations-list" class="space-y-2 max-h-96 overflow-y-auto">
+                <li class="p-4 text-center text-gray-400">Loading reservations...</li>
+            </ul>
+        </div>
+    </section>
+</main>
+
+<!-- Footer -->
+<footer th:replace="fragments/layout :: footer"></footer>
+
+
+</body>
+</html>

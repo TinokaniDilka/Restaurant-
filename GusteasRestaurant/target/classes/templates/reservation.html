@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Gustea's – Reservations (Demo – Private + Cancel)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        gold: '#ffdb1a',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        :root {
+            --color-bg: #000000;
+            --color-gold: #ffdb1a;
+            --color-dark: #1a1a1a;
+        }
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            background: var(--color-bg);
+            color: #e5e5e5;
+            min-height: 100vh;
+        }
+        .gold { color: var(--color-gold); }
+        .bg-gold { background: var(--color-gold); }
+        .font-heading { font-family: Georgia, 'Times New Roman', serif; }
+    </style>
+</head>
+<body class="antialiased">
+
+<div class="max-w-4xl mx-auto px-5 py-12 md:py-16">
+
+    <header class="text-center mb-12">
+        <!-- Changed to gold -->
+        <h1 class="text-5xl md:text-6xl font-heading gold mb-3 tracking-wide">
+            Gustea's
+        </h1>
+
+        <p class="text-xl text-gray-300">Reserve Your Table – Demo</p>
+        <p class="text-sm text-gray-500 mt-2">Reservations visible only to you (using your personal code)</p>
+    </header>
+
+    <!-- Personal Code Section -->
+    <section class="bg-zinc-900 p-6 md:p-8 rounded-2xl border border-zinc-800 mb-10">
+        <label class="block text-gold text-lg mb-3 font-medium">Your Personal Code / Email / Nickname</label>
+        <div class="flex flex-col sm:flex-row gap-4">
+            <input id="user-key" type="text" placeholder=" your@email.com"
+                   class="flex-1 bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold">
+            <button id="load-my-reservations" class="bg-gold text-black px-6 py-3 rounded-lg font-bold hover:bg-yellow-400 transition">
+                Load / Save as Me
+            </button>
+        </div>
+        <p class="text-sm text-gray-500 mt-3">Use the same code every time to see & manage only your reservations.</p>
+    </section>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="hidden fixed top-6 left-1/2 -translate-x-1/2 z-50 min-w-[300px]">
+        <div class="bg-zinc-900 border border-zinc-700 rounded-xl px-6 py-4 shadow-2xl flex items-center gap-4">
+            <div id="toast-icon"></div>
+            <p id="toast-message" class="font-medium"></p>
+        </div>
+    </div>
+
+    <!-- Reservation Form -->
+    <section class="bg-zinc-900 p-8 md:p-10 rounded-2xl border border-zinc-800 shadow-2xl mb-16">
+        <form id="reservation-form" class="space-y-7">
+            <div>
+                <label class="block text-gold text-lg mb-2 font-medium">Full Name</label>
+                <input id="res-name" type="text" required placeholder="Your name"
+                       class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold transition">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-gold text-lg mb-2 font-medium">Date</label>
+                    <input id="res-date" type="date" required class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold transition">
+                </div>
+                <div>
+                    <label class="block text-gold text-lg mb-2 font-medium">Time</label>
+                    <input id="res-time" type="time" required class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold transition">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-gold text-lg mb-2 font-medium">Number of Guests</label>
+                <input id="res-guests" type="number" min="1" max="20" required placeholder="1–20"
+                       class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gold focus:ring-1 focus:ring-gold transition">
+            </div>
+
+            <button type="submit" class="w-full bg-gold text-black py-4 rounded-xl font-bold text-lg uppercase tracking-wider hover:bg-yellow-400 transition shadow-lg">
+                Submit Reservation
+            </button>
+            <button type="button"
+                    class="w-full bg-gold text-black py-4 rounded-xl font-bold text-lg uppercase tracking-wider hover:bg-yellow-400 transition shadow-lg"
+                    onclick="location.href = '/index'">
+                ⌂ Home
+            </button>
+        </form>
+    </section>
+
+    <!--  Reservations List -->
+    <section>
+        <div class="flex justify-between items-center mb-6">
+            <h2 class="text-3xl font-heading gold">Your Reservations</h2>
+            <button id="clear-my-reservations" class="text-sm text-red-400 hover:text-red-300 underline">
+                Clear all my reservations (demo)
+            </button>
+        </div>
+
+        <div class="bg-zinc-900 rounded-2xl border border-zinc-800 overflow-hidden shadow-2xl min-h-[200px]">
+            <ul id="reservations-list" class="divide-y divide-zinc-800"></ul>
+            <div id="no-reservations" class="p-10 text-center text-gray-500 hidden">
+                No reservations yet.<br>Submit one above!
+            </div>
+        </div>
+
+        <p class="text-center text-gray-600 mt-6 text-sm">
+            Demo only – data saved privately in your browser using your personal code
+        </p>
+    </section>
+
+</div>
+
+<script>
+
+    let currentUserKey = localStorage.getItem('gusteaCurrentUserKey') || '';
+    let reservations = [];
+
+    const userKeyInput = document.getElementById('user-key');
+    const loadBtn = document.getElementById('load-my-reservations');
+    const form = document.getElementById('reservation-form');
+    const list = document.getElementById('reservations-list');
+    const noRes = document.getElementById('no-reservations');
+    const clearBtn = document.getElementById('clear-my-reservations');
+
+    if (currentUserKey) {
+        userKeyInput.value = currentUserKey;
+        loadReservations();
+    }
+
+    function getStorageKey() {
+        const key = userKeyInput.value.trim().toLowerCase();
+        if (!key) {
+            showToast("Please enter your personal code first", false);
+            return null;
+        }
+        return `gusteaReservations_${key}`;
+    }
+
+    function loadReservations() {
+        const storageKey = getStorageKey();
+        if (!storageKey) return;
+
+        currentUserKey = userKeyInput.value.trim();
+        localStorage.setItem('gusteaCurrentUserKey', currentUserKey);
+
+        const saved = localStorage.getItem(storageKey);
+        reservations = saved ? JSON.parse(saved) : [];
+        renderList();
+        showToast(`Loaded your reservations (${reservations.length})`, true);
+    }
+
+    function saveReservations() {
+        const storageKey = getStorageKey();
+        if (!storageKey) return;
+        localStorage.setItem(storageKey, JSON.stringify(reservations));
+        renderList();
+    }
+
+    function removeReservation(index) {
+        if (confirm("Cancel this reservation?")) {
+            reservations.splice(index, 1);
+            saveReservations();
+            showToast("Reservation cancelled", true);
+        }
+    }
+
+    function renderList() {
+        list.innerHTML = '';
+        if (reservations.length === 0) {
+            noRes.classList.remove('hidden');
+            return;
+        }
+        noRes.classList.add('hidden');
+
+        reservations.forEach((res, index) => {
+            const li = document.createElement('li');
+            li.className = 'p-5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-zinc-800 last:border-b-0';
+
+            const dateTime = new Date(`${res.date}T${res.time}`).toLocaleString('en-GB', {
+                dateStyle: 'short',
+                timeStyle: 'short'
+            });
+
+            li.innerHTML = `
+      <div class="flex-1">
+        <p class="font-medium text-white">${res.name} — ${res.guests} guest${res.guests !== 1 ? 's' : ''}</p>
+        <p class="text-sm text-gray-400">${dateTime}</p>
+      </div>
+      <div class="flex items-center gap-4">
+        <span class="text-yellow-400 font-bold text-sm uppercase tracking-wide">PENDING</span>
+        <button onclick="removeReservation(${index})"
+                class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+          Cancel
+        </button>
+      </div>
+    `;
+            list.appendChild(li);
+        });
+    }
+
+    function showToast(message, isSuccess = true) {
+        const toast = document.getElementById('toast');
+        document.getElementById('toast-message').textContent = message;
+        document.getElementById('toast-icon').innerHTML = isSuccess
+            ? `<svg class="w-7 h-7 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`
+            : `<svg class="w-7 h-7 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+
+        toast.classList.remove('hidden');
+        setTimeout(() => toast.classList.add('hidden'), 4000);
+    }
+
+    loadBtn.addEventListener('click', loadReservations);
+
+    form.addEventListener('submit', e => {
+        e.preventDefault();
+
+        if (!getStorageKey()) return;
+
+        const name   = document.getElementById('res-name').value.trim();
+        const date   = document.getElementById('res-date').value;
+        const time   = document.getElementById('res-time').value;
+        const guests = parseInt(document.getElementById('res-guests').value);
+
+        if (!name || !date || !time || !guests || guests < 1) {
+            showToast("Please fill all fields correctly", false);
+            return;
+        }
+
+        reservations.push({ name, date, time, guests });
+        saveReservations();
+
+        showToast("Reservation added – only visible to you", true);
+        form.reset();
+    });
+
+    clearBtn.addEventListener('click', () => {
+        if (confirm("Clear ALL your reservations?")) {
+            reservations = [];
+            saveReservations();
+            showToast("All your reservations cleared", true);
+        }
+    });
+
+</script>
+
+<!-- Make removeReservation available globally so onclick works -->
+<script>window.removeReservation = removeReservation;</script>
+
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org"
+      xmlns:layout="http://www.ultraq.net.nz/thymeleaf/layout">
+
+<!-- Head (reusable) -->
+<head th:fragment="head_config(pageTitle)">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title th:text="${pageTitle} ?: 'Gustea\'s Restaurant'">Gustea's Restaurant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" th:href="@{/css/style.css}">
+    <!-- Global scripts/styles here if needed -->
+</head>
+
+<body class="antialiased">
+
+<!-- Header / Navigation -->
+<header th:fragment="header">
+    <nav class="fixed top-0 left-0 w-full bg-zinc-900/95 backdrop-blur-md z-50 border-b border-zinc-800">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="text-2xl font-bold text-gold">Gustea's</div>
+            <ul class="flex space-x-10">
+                <li><a th:href="@{/}" class="hover:text-gold transition">Home</a></li>
+                <li><a href="/#menu" class="hover:text-gold transition">Menu</a></li>
+                <li><a th:href="@{/about}" class="hover:text-gold transition">About Us</a></li>
+                <li><a th:href="@{/contact}" class="hover:text-gold transition">Contact</a></li>
+                <li>
+                    <a th:href="@{/cart}" class="hover:text-gold transition flex items-center">
+                        Cart
+                        <span id="cart-badge" class="ml-1 bg-red-600 text-white text-xs rounded-full px-2 py-1" style="opacity:0;">0</span>
+                    </a>
+                </li>
+            </ul>
+        </div>
+    </nav>
+</header>
+
+<!-- MAIN CONTENT AREA – THIS IS REQUIRED -->
+<!-- MAIN CONTENT AREA – THIS MUST BE HERE -->
+<main class="pt-24 min-h-screen" layout:fragment="content">
+    <!-- If no content from child page -->
+    <div th:if="${#strings.isEmpty(content)}" class="text-center py-40 text-red-400 text-2xl">
+        Content from menu.html is not loading – check child template
+    </div>
+</main>
+
+<!-- Footer -->
+<footer th:fragment="footer" class="bg-zinc-950 py-16 border-t border-zinc-800">
+    <div class="max-w-7xl mx-auto px-6 grid md:grid-cols-4 gap-12">
+        <div>
+            <h3 class="text-2xl font-bold text-gold mb-4">Gustea's Restaurant</h3>
+            <p class="text-gray-400">Where passion meets the plate. "Anyone can cook!"</p>
+        </div>
+        <div>
+            <h4 class="text-lg font-semibold text-white mb-4">Quick Links</h4>
+            <ul class="space-y-2 text-gray-400">
+                <li><a th:href="@{/menu}" class="hover:text-gold">Menu</a></li>
+                <li><a th:href="@{/about}" class="hover:text-gold">About Us</a></li>
+                <li><a href="#" class="hover:text-gold">Careers</a></li>
+            </ul>
+        </div>
+        <div>
+            <h4 class="text-lg font-semibold text-white mb-4">Contact</h4>
+            <p class="text-gray-400">
+                5 Rue de Rivoli, Paris, France<br>
+                bonjour@gusteas.com<br>
+                +33 1 23 45 67 89
+            </p>
+        </div>
+        <div>
+            <h4 class="text-lg font-semibold text-white mb-4">Follow Us</h4>
+            <p class="text-gray-400">F  T  I</p>
+        </div>
+    </div>
+    <div class="text-center mt-12 pt-8 border-t border-zinc-800 text-gray-500 text-sm">
+        © 2025 Gustea's Restaurant. All rights reserved.
+    </div>
+</footer>
+
+<!-- Global Scripts -->
+<script th:src="@{/js/cart.js}"></script>
+<!-- Add other global scripts here if needed -->
+
+</body>
+</html>
